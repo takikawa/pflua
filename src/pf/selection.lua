@@ -7,15 +7,14 @@
 -- This generates an array of pseudo-instructions like this:
 --
 --   { { "load", "r1", 12, 2 } }
---     { "add", "r1", "r3" } }
+--     { "sub", "r1", "r3" } }
 --
 -- The instructions available are:
 --   * cmp
 --   * mov
 --   * mov64
 --   * load
---   * add
---   * add-i
+--   * lea
 --   * sub
 --   * sub-i
 --   * mul
@@ -50,7 +49,7 @@ local negate_op = { ["="] = "!=", ["!="] = "=",
 
 -- this maps numeric operations that we handle in a generic way
 -- because the instruction selection is very similar
-local numop_map = { ["+"] = "add", ["-"] = "sub", ["*"] = "mul",
+local numop_map = { ["-"] = "sub", ["*"] = "mul",
                     ["*64"] = "mul", ["&"] = "and", ["|"] = "or",
                     ["^"] = "xor" }
 
@@ -144,6 +143,33 @@ local function select_block(blocks, block, new_register, instructions, next_labe
          local reg2 = select_arith(expr[2])
          emit({ "load", reg, reg2, expr[3] })
          return reg
+
+      -- for addition we can often eliminate a mov using lea
+      elseif expr[1] == "+" then
+         local reg2 = select_arith(expr[2])
+         local reg3 = select_arith(expr[3])
+         local tmp = new_register()
+
+         if type(reg2) ~= "number" and type(reg3) ~= "number" then
+            emit({ "lea", tmp, reg2, reg3, 1 })
+            return tmp
+
+         elseif type(reg2) == "number" then
+            if type(reg3) ~= "number" then
+               emit({ "lea", tmp, reg3, nil, 0, reg2 })
+               return tmp
+            else
+               -- this case should only come up in unoptimized code
+               local tmp2 = new_register()
+               emit({ "mov", tmp2, reg2 })
+               emit({ "lea", tmp, tmp2, nil, 0, reg3 })
+               return tmp
+            end
+         elseif type(reg3) == "number" then
+            local tmp = new_register()
+            emit({ "lea", tmp, reg2, nil, 0, reg3 })
+            return tmp
+         end
 
       elseif numop_map[expr[1]] then
          local reg2 = select_arith(expr[2])

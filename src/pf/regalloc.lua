@@ -72,9 +72,10 @@ local function live_intervals(instrs)
    for idx, instr in ipairs(instrs) do
       local itype = instr[1]
 
-      -- movs and loads are the only instructions that result in
+      -- movs, loads, and lea are the only instructions that result in
       -- new live intervals
-      if itype == "load" or itype == "mov" or itype == "mov64" then
+      if itype == "load" or itype == "mov" or itype == "mov64" or
+         itype == "lea" then
          local name = instr[2]
 	 local interval = { name = name,
 			    start = idx,
@@ -83,9 +84,11 @@ local function live_intervals(instrs)
          intervals[name] = interval
          table.insert(order, interval)
 
-         -- movs/loads also read registers, so update endpoint
-         if type(instr[3]) == "string" then
-            intervals[instr[3]].finish = idx
+         -- movs/loads/leas also read registers, so update endpoint
+         for i=3, #instr do
+            if type(instr[i]) == "string" then
+               intervals[instr[i]].finish = idx
+            end
          end
 
       -- update liveness endpoint for instructions that read
